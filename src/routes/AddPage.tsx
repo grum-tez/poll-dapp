@@ -1,26 +1,75 @@
-import { Bytes } from '@completium/archetype-ts-types';
-import CloseIcon from '@mui/icons-material/Close';
-import SendIcon from '@mui/icons-material/Send';
-import LoadingButton from '@mui/lab/LoadingButton';
-import { Box, Typography } from '@mui/material';
-import Container from '@mui/material/Container';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Grid2 from '@mui/material/Unstable_Grid2';
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { useNavigate } from "react-router-dom";
+import { Bytes, Entrypoint } from '@completium/archetype-ts-types'
+import CloseIcon from '@mui/icons-material/Close'
+import SendIcon from '@mui/icons-material/Send'
+import LoadingButton from '@mui/lab/LoadingButton'
+import { Box, Typography } from '@mui/material'
+import Container from '@mui/material/Container'
+import IconButton from '@mui/material/IconButton'
+import TextField from '@mui/material/TextField'
+import Grid2 from '@mui/material/Unstable_Grid2'
+import React from 'react'
+import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
-import { PollPanel } from '../components/PollPanel';
-import { useConnect, useIsConnected } from '../contexts/Beacon';
-import { useContract } from '../contexts/Contract';
-import { UIPoll, useLoadData } from '../contexts/Polls';
-import { Poll } from '../contexts/Polls';
-import { useIPFSBrowser } from '../contexts/Settings';
+import { PollPanel } from '../components/PollPanel'
+import { useConnect, useIsConnected } from '../contexts/Beacon'
+import { useContract } from '../contexts/Contract'
+import { UIPoll, useLoadData } from '../contexts/Polls'
+import { Poll } from '../contexts/Polls'
+import { useContractAddress, useIPFSBrowser } from '../contexts/Settings'
+import { useTezosToolkit } from '../contexts/Taquito'
 
-const AddForm = (arg : { setUIPoll : React.Dispatch<React.SetStateAction<UIPoll | undefined>> }) => {
-  const [uri, setURI] = React.useState('');
-  const [error, setError] = React.useState(false);
+let didContractLoad = false
+
+const AddForm = (arg: {
+  setUIPoll: React.Dispatch<React.SetStateAction<UIPoll | undefined>>
+}) => {
+  //Added by GF for demo....
+  const ttk = useTezosToolkit()
+  const contractAddress = useContractAddress()
+  const [actualContract, setActualContract] = React.useState(undefined)
+  const [isActualContract, setIsActualContract] = React.useState(true)
+  const [isAddEntrypoint, setIsAddEntrypoint] = React.useState(true)
+  const [loadingContract, setLoadingContract] = React.useState(true)
+
+  React.useEffect(() => {
+    if (!didContractLoad) {
+      didContractLoad = true
+      let ignore = false
+
+      async function startFetching() {
+        console.log('in startFetching')
+
+        try {
+          const ctr = await (ttk as any).wallet.at(contractAddress)
+          setActualContract(ctr)
+          setIsActualContract(true)
+          setIsAddEntrypoint(!!(ctr as any)?.entrypoints?.entrypoints?.add_poll)
+          console.log('in try block')
+        } catch (e) {
+          setIsActualContract(false)
+          setIsAddEntrypoint(false)
+          console.log(e)
+          console.log('in catch block')
+        }
+        setLoadingContract(false)
+      }
+
+      startFetching()
+      return () => {
+        ignore = true
+      }
+    }
+  }, [])
+
+  console.log('Contract found: ', isActualContract)
+  console.log('Add entrypoint found: ', isAddEntrypoint)
+  console.log(actualContract)
+  console.log((actualContract as any)?.entrypoints?.entrypoints?.add_poll)
+  // ... demo ends here
+
+  const [uri, setURI] = React.useState('')
+  const [error, setError] = React.useState(false)
   const [isValidURI, setIsValidURI] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const ipfsBrowser = useIPFSBrowser()
@@ -39,7 +88,7 @@ const AddForm = (arg : { setUIPoll : React.Dispatch<React.SetStateAction<UIPoll 
       await loadData()
       setLoading(false)
       setIsValidURI(false)
-      navigate("/poll-dapp")
+      navigate('/poll-dapp')
     } catch (e) {
       setLoading(false)
     }
@@ -47,85 +96,147 @@ const AddForm = (arg : { setUIPoll : React.Dispatch<React.SetStateAction<UIPoll 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const url = event.target.value
     try {
-      setURI(url);
-      setError(false);
-      if (url !== "") {
+      setURI(url)
+      setError(false)
+      if (url !== '') {
         const res = await fetch(ipfsBrowser + url)
-        const uip : UIPoll = await res.json()
+        const uip: UIPoll = await res.json()
         arg.setUIPoll(uip)
         setIsValidURI(true)
       } else {
         arg.setUIPoll(undefined)
         setIsValidURI(false)
       }
-    } catch(e) {
-      setError(true);
+    } catch (e) {
+      setError(true)
       setIsValidURI(false)
       console.log(e)
     }
-  };
-  return <Grid2 container justifyContent="flex-end" alignItems="center" sx={{ m: '28px' }} spacing={2}>
-    <Grid2 xs={12}>
-      <TextField
-        fullWidth
-        variant="outlined"
-        id="ipfh-field"
-        label="IPFS Hash"
-        value={uri}
-        onChange={handleChange}
-        error={error}
-        helperText={ error ? "Invalid Hash" : '' }
-      />
-    </Grid2>
-    <Grid2>
-      <LoadingButton
-        onClick={addPoll}
-        loading={loading}
-        variant='contained'
-        endIcon={<SendIcon />}
-        disabled={!isValidURI}>
-        Submit
-      </LoadingButton>
-    </Grid2>
-  </Grid2>
+  }
+  return (
+    <>
+      {loadingContract ? (
+        <div> Loading contract... </div>
+      ) : isActualContract ? (
+        <div style={{ color: 'green' }}> ✅ Contract is connected </div>
+      ) : (
+        <div style={{ color: 'red' }}> ❌ No contract is connnected </div>
+      )}
+
+      <Grid2
+        container
+        justifyContent="flex-end"
+        alignItems="center"
+        sx={{ m: '28px' }}
+        spacing={2}
+      >
+        <Grid2 xs={12}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            id="ipfh-field"
+            label="IPFS Hash"
+            value={uri}
+            onChange={handleChange}
+            error={error}
+            helperText={error ? 'Invalid Hash' : ''}
+            disabled={!isActualContract}
+          />
+        </Grid2>
+        <Grid2>
+          <LoadingButton
+            onClick={addPoll}
+            loading={loading}
+            variant="contained"
+            endIcon={<SendIcon />}
+            disabled={!isValidURI}
+          >
+            Submit
+          </LoadingButton>
+          <div>
+            {!loadingContract &&
+              (isAddEntrypoint ? (
+                <div style={{ color: 'green' }}>
+                  ✅ Clicking submit will call the add_poll entrypoint on the
+                  connected contract{' '}
+                </div>
+              ) : (
+                <div style={{ color: 'red' }}>
+                  ❌ Clicking submit should call the add_poll entrypoint, but
+                  the connected contract does not have an entrypoint called
+                  "add_poll"{' '}
+                </div>
+              ))}
+          </div>
+        </Grid2>
+      </Grid2>
+    </>
+  )
 }
 
-const PollPreview = (arg : { uip : UIPoll | undefined }) => {
+const PollPreview = (arg: { uip: UIPoll | undefined }) => {
   if (arg.uip === undefined) {
-    return <Grid2 container justifyContent="center" sx={{ height: '100%' }}>
-        <Grid2 xs={12} sx={{ p: 2, border: '1px dashed grey', height: '100%' }} container justifyContent="center" alignItems="center" >
+    return (
+      <Grid2 container justifyContent="center" sx={{ height: '100%' }}>
+        <Grid2
+          xs={12}
+          sx={{ p: 2, border: '1px dashed grey', height: '100%' }}
+          container
+          justifyContent="center"
+          alignItems="center"
+        >
           <Grid2>
             <Typography color="text.secondary">Preview</Typography>
           </Grid2>
         </Grid2>
       </Grid2>
+    )
   } else {
-    const setChoice : React.Dispatch<React.SetStateAction<number | undefined>> = n => {}
-    const poll : Poll = { ...arg.uip, id : 0, responses : [] }
-    return <Box sx={{ p: 2, border: '1px dashed grey' }}>
+    const setChoice: React.Dispatch<
+      React.SetStateAction<number | undefined>
+    > = (n) => {}
+    const poll: Poll = { ...arg.uip, id: 0, responses: [] }
+    return (
+      <Box sx={{ p: 2, border: '1px dashed grey' }}>
         <PollPanel
-        preview={true}
-        poll={poll}
-        choice={undefined}
-        total={0}
-        bar={false}
-        setChoice={setChoice}
-      />
+          preview={true}
+          poll={poll}
+          choice={undefined}
+          total={0}
+          bar={false}
+          setChoice={setChoice}
+        />
       </Box>
+    )
   }
 }
 
 export const Add = () => {
   const [uiPoll, setUIPoll] = React.useState<UIPoll | undefined>(undefined)
-  return <Container style={{ height: '100vh' }}>
-    <IconButton component={Link} sx={{ top : '72px', position: 'absolute' }} size="large" to="/poll-dapp"><CloseIcon fontSize="inherit"/></IconButton>
-    <Grid2 container justifyContent="center" alignItems="center" sx={{ height : 'calc(100% - 280px)', mt: '140px', mb : '140px' }}>
-      <Grid2 md={6} xs={12}>
-        <AddForm setUIPoll={setUIPoll} />
+
+  return (
+    <Container style={{ height: '100vh' }}>
+      <IconButton
+        component={Link}
+        sx={{ top: '72px', position: 'absolute' }}
+        size="large"
+        to="/poll-dapp"
+      >
+        <CloseIcon fontSize="inherit" />
+      </IconButton>
+      <Grid2
+        container
+        justifyContent="center"
+        alignItems="center"
+        sx={{ height: 'calc(100% - 280px)', mt: '140px', mb: '140px' }}
+      >
+        <Grid2 md={6} xs={12}>
+          <AddForm setUIPoll={setUIPoll} />
+        </Grid2>
+        <Grid2 md={6} xs={12} sx={{ height: '100%' }}>
+          <PollPreview uip={uiPoll} />
+        </Grid2>
       </Grid2>
-      <Grid2 md={6} xs={12} sx={{ height: '100%' }}>
-        <PollPreview uip={uiPoll} />
-      </Grid2>
-    </Grid2>
-  </Container>
+    </Container>
+  )
 }
